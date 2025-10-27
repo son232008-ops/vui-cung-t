@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Web Nghe Nhạc</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      /* Đổi màu nền cho phù hợp với giao diện tối */
+      background: #1c1c1e; 
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+    }
+
+    h1 {
+      color: #fff;
+      z-index: 2;
+      margin-bottom: 10px; /* Đã giảm từ 20px xuống 10px */
+    }
+
+    /* --- CSS MÔ PHỎNG GIAO DIỆN IOS (Glassmorphism) --- */
+    .player {
+      background: rgba(40, 40, 40, 0.7); /* Nền tối mờ */
+      backdrop-filter: blur(20px);        /* Hiệu ứng làm mờ nền */
+      -webkit-backdrop-filter: blur(20px); 
+      
+      padding: 15px 25px; /* Đã giảm padding dọc từ 20px xuống 15px */
+      border-radius: 40px; /* Bo góc nhiều hơn */
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1); 
+      
+      text-align: center;
+      width: 320px;
+      color: white; 
+      z-index: 2;
+      position: relative;
+      
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* Khung màn hình đen (video/lyrics) */
+    .video-frame {
+      width: 100%;
+      height: 220px; /* ĐÃ GIẢM CHIỀU CAO TỪ 300PX XUỐNG 220PX */
+      background: black;
+      border-radius: 25px;
+      margin-bottom: 15px; /* Đã giảm từ 20px xuống 15px */
+      overflow: hidden; /* Để ảnh bìa không bị tràn */
+    }
+
+    .cover {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      /* Đã loại bỏ border-radius cũ */
+      margin-bottom: 0; 
+    }
+
+    /* Ẩn bộ điều khiển HTML mặc định */
+    audio {
+        display: none;
+    }
+    
+    /* Các nút điều khiển tùy chỉnh (Next, Previous, Play/Pause) */
+    .controls {
+        display: flex;
+        justify-content: space-around;
+        align-items: center;
+        width: 100%;
+        margin-top: 15px;
+        margin-bottom: 25px;
+    }
+
+    .controls button {
+        background: none;
+        border: none;
+        color: white;
+        font-size: 35px;
+        cursor: pointer;
+        opacity: 0.9;
+        transition: opacity 0.1s;
+    }
+
+    #playPauseBtn {
+        font-size: 50px; /* Nút play lớn hơn */
+    }
+
+    .controls button:hover {
+        opacity: 1;
+    }
+
+    /* Thanh điều chỉnh tiến độ và âm lượng (Slider Bar) */
+    .slider-container {
+        width: 100%;
+        height: 25px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .slider-container span {
+        font-size: 12px;
+        font-weight: bold;
+        color: rgba(255, 255, 255, 0.7);
+    }
+
+    /* Cài đặt thanh trượt (input type="range") */
+    input[type=range] {
+        -webkit-appearance: none;
+        width: 100%;
+        height: 4px; 
+        background: rgba(255, 255, 255, 0.4);
+        border-radius: 2px;
+        margin: 0 10px;
+        cursor: pointer;
+    }
+
+    /* Nút kéo (Thumb) của thanh trượt */
+    input[type=range]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        height: 12px;
+        width: 12px;
+        border-radius: 50%;
+        background: white;
+    }
+    
+    /* Đảm bảo Playlist vẫn hiển thị đúng */
+    ul {
+      list-style: none;
+      padding: 0;
+      margin: 20px 0 0 0;
+      width: 100%;
+    }
+
+    li {
+      margin: 10px 0;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      padding: 5px;
+      border-radius: 8px;
+      transition: background 0.3s, color 0.3s;
+      color: white; /* Đổi màu chữ trong list */
+    }
+
+    li:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+    }
+
+    li img {
+      width: 50px;
+      height: 50px;
+      border-radius: 8px;
+      margin-right: 10px;
+      object-fit: cover;
+    }
+
+    /* Icon bay */
+    .icon {
+      position: absolute;
+      font-size: 24px;
+      pointer-events: none;
+      animation-name: float;
+      animation-timing-function: linear;
+      animation-fill-mode: forwards;
+    }
+
+    @keyframes float {
+      0% {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+      }
+      100% {
+        transform: translateY(-100vh) translateX(var(--x)) scale(var(--scale));
+        opacity: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Chill cùng hoangson</h1>
+
+  <div class="player">
+    <div class="video-frame">
+        <img id="currentCover" src="mqdefault.jpg" alt="Current Song" class="cover">
+    </div>
+    
+    <div class="slider-container">
+        <span id="currentTimeDisplay">0:00</span>
+        <input type="range" id="progress-bar" value="0" min="0" max="100">
+        <span id="durationDisplay">-0:00</span>
+    </div>
+    
+    <div class="controls">
+        <button id="prevBtn">⏮️</button>
+        <button id="playPauseBtn">⏯️</button>
+        <button id="nextBtn">⏭️</button>
+    </div>
+    
+    <div class="slider-container" style="margin-top: 0; margin-bottom: 10px;">
+        <span style="font-size: 18px;">🔈</span>
+        <input type="range" id="volume-slider" min="0" max="1" step="0.01" value="1">
+        <span style="font-size: 18px;">🔊</span>
+    </div>
+    
+    <audio id="audio">
+      Trình duyệt của bạn không hỗ trợ audio.
+    </audio>
+
+    <ul id="playlist">
+    </ul>
+  </div>
+
+  <script>
+    // --- Khai báo biến ---
+    const mainAudio = document.getElementById('audio');
+    const currentCover = document.getElementById('currentCover');
+    const playlistEl = document.getElementById('playlist');
+
+    // Khai báo các biến DOM mới
+    const playPauseBtn = document.getElementById('playPauseBtn');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const progressBar = document.getElementById('progress-bar');
+    const volumeSlider = document.getElementById('volume-slider');
+    const currentTimeDisplay = document.getElementById('currentTimeDisplay');
+    const durationDisplay = document.getElementById('durationDisplay');
+
+    // DANH SÁCH BÀI
+    const tracks = [
+      { file: "Iframe 07. Thôi Em Đừng Đi - RPT MCK ( ft. Trung Trần ) _ _ 99_ _ the album [6fzH7a3XQW0].mp3", cover: "fdd9b0c6-786f-4bce-a3a0-4d78ebab5c22.jpg", title: "Bài hát 1" },
+      { file: "Iframe 'bao tiền một mớ bình yên_' - 14 Casper & Bon Nghiêm (Official) (Track 09 - Album 'SỐ KHÔNG') [vVhKA9Av6vA].mp3", cover: "f93bb374f3946da022a3c19a52adc66e.jpg", title: "Bài hát 2" },
+      { file: "bai_hat_so_3.mp3", cover: "cbc7eff5-0923-4354-a46f-c64003390706.jpg", title: "Bài hát 3" }
+    ];
+
+    let currentIndex = 0;
+    const FADE_DURATION = 800; // ms
+    
+    // --- Hàm tiện ích ---
+
+    // Hàm chuyển đổi giây sang định dạng M:SS
+    function formatTime(seconds) {
+      const minutes = Math.floor(seconds / 60);
+      const remainingSeconds = Math.floor(seconds % 60);
+      return `${minutes}:${remainingSeconds < 10 ? '0' : ''}${remainingSeconds}`;
+    }
+
+    // --- Chức năng điều khiển nhạc ---
+
+    // build playlist UI (giữ nguyên)
+    function buildPlaylist() {
+      playlistEl.innerHTML = "";
+      tracks.forEach((t, i) => {
+        const li = document.createElement('li');
+        li.innerHTML = `<img src="${t.cover}" alt="${t.title}"><span>${t.title}</span>`;
+        li.addEventListener('click', () => playTrack(i, true)); 
+        playlistEl.appendChild(li);
+      });
+    }
+
+    // fade out current audio, đổi file, fade in (giữ nguyên)
+    function fadeTo(newIndex, duration = FADE_DURATION) {
+      const steps = 20;
+      const stepTime = duration / steps;
+      const startVol = mainAudio.volume || 1;
+      let i = 0;
+
+      const fadeOut = setInterval(() => {
+        i++;
+        mainAudio.volume = Math.max(0, startVol * (1 - i / steps));
+        if (i >= steps) {
+          clearInterval(fadeOut);
+          
+          const track = tracks[newIndex];
+          mainAudio.src = track.file;
+          currentCover.src = track.cover;
+          mainAudio.currentTime = 0;
+          
+          // Cập nhật nút play/pause
+          playPauseBtn.textContent = '⏸️'; 
+          
+          mainAudio.play().catch(()=>{}); 
+          
+          let j = 0;
+          const fadeIn = setInterval(() => {
+            j++;
+            mainAudio.volume = Math.min(1, startVol * (j / steps));
+            if (j >= steps) clearInterval(fadeIn);
+          }, stepTime);
+        }
+      }, stepTime);
+    }
+
+     // phát bài (giữ nguyên, nhưng thêm cập nhật nút)
+    function playTrack(index, useFade = false) {
+      if (index < 0 || index >= tracks.length) return;
+      currentIndex = index;
+      const track = tracks[index];
+
+      // Cập nhật trạng thái nút Play
+      playPauseBtn.textContent = '⏸️'; 
+
+      if (mainAudio.paused && !mainAudio.src) {
+        mainAudio.src = track.file;
+        currentCover.src = track.cover;
+        mainAudio.volume = 1;
+        mainAudio.play().catch(()=>{});
+      } else if (useFade) {
+        fadeTo(index);
+      } else {
+        mainAudio.src = track.file;
+        currentCover.src = track.cover;
+        mainAudio.volume = 1;
+        mainAudio.play().catch(()=>{});
+      }
+    }
+    
+    // --- Xử lý sự kiện cho các nút điều khiển mới ---
+
+    // 1. Nút Play/Pause
+    playPauseBtn.addEventListener('click', () => {
+        if (!mainAudio.src) {
+            // Nếu chưa có bài nào, phát bài đầu tiên
+            playTrack(currentIndex, false);
+            return;
+        }
+
+        if (mainAudio.paused) {
+            mainAudio.play();
+            playPauseBtn.textContent = '⏸️';
+        } else {
+            mainAudio.pause();
+            playPauseBtn.textContent = '⏯️';
+        }
+    });
+
+    // 2. Nút Next
+    nextBtn.addEventListener('click', () => {
+        const next = (currentIndex + 1) % tracks.length;
+        playTrack(next, true); 
+    });
+    
+    // 3. Nút Previous
+    prevBtn.addEventListener('click', () => {
+        // Quay lại bài trước, hoặc về đầu bài hiện tại nếu đã phát được 3 giây
+        if (mainAudio.currentTime < 3) {
+             const prev = (currentIndex - 1 + tracks.length) % tracks.length;
+             playTrack(prev, true);
+        } else {
+            mainAudio.currentTime = 0;
+        }
+    });
+    
+    // 4. Thanh Âm lượng
+    volumeSlider.addEventListener('input', () => {
+        mainAudio.volume = volumeSlider.value;
+    });
+
+    // 5. Thanh Tiến trình (kéo)
+    progressBar.addEventListener('input', () => {
+        const seekTime = (progressBar.value / 100) * mainAudio.duration;
+        mainAudio.currentTime = seekTime;
+    });
+
+    // --- Cập nhật UI khi nhạc chạy ---
+
+    mainAudio.addEventListener('loadedmetadata', () => {
+        // Cập nhật giá trị Max và thời lượng hiển thị khi bài hát được tải
+        progressBar.max = 100;
+        durationDisplay.textContent = '-' + formatTime(mainAudio.duration);
+    });
+
+    mainAudio.addEventListener('timeupdate', () => {
+        if (!isNaN(mainAudio.duration)) {
+            // Cập nhật thanh tiến trình
+            const progress = (mainAudio.currentTime / mainAudio.duration) * 100;
+            progressBar.value = progress;
+            
+            // Cập nhật thời gian đã qua và thời gian còn lại
+            currentTimeDisplay.textContent = formatTime(mainAudio.currentTime);
+            durationDisplay.textContent = '-' + formatTime(mainAudio.duration - mainAudio.currentTime);
+        }
+    });
+
+    mainAudio.addEventListener('pause', () => {
+        playPauseBtn.textContent = '⏯️';
+    });
+    
+    mainAudio.addEventListener('play', () => {
+        playPauseBtn.textContent = '⏸️';
+    });
+
+
+    // next tự động khi hết bài (giữ nguyên)
+    mainAudio.addEventListener('ended', () => {
+      const next = (currentIndex + 1) % tracks.length;
+      playTrack(next, true);
+    });
+
+     // --- Hiệu ứng Icon bay ---
+    const icons = ['🎵', '🎶', '💖', '🎸', '🎹'];
+
+    function createIcon() {
+      // ĐÃ SỬA: Dùng mainAudio thay vì audio để liên kết đúng với thẻ <audio>
+      if (!mainAudio.paused) { 
+        const icon = document.createElement('div');
+        icon.classList.add('icon');
+        icon.textContent = icons[Math.floor(Math.random() * icons.length)];
+
+        icon.style.left = Math.random() * window.innerWidth + 'px';
+        icon.style.bottom = '-30px';
+
+        const deltaX = (Math.random() - 0.5) * 200;
+        const scale = Math.random() * 0.8 + 0.5;
+        const duration = Math.random() * 2 + 3;
+
+        icon.style.setProperty('--x', deltaX + 'px');
+        icon.style.setProperty('--scale', scale);
+        icon.style.animationDuration = duration + 's';
+
+        document.body.appendChild(icon);
+
+        setTimeout(() => {
+          icon.remove();
+        }, duration * 1000);
+      }
+    }
+
+    // --- Khởi tạo ---
+    buildPlaylist();
+    setInterval(createIcon, 300);
+  </script>
+  
+</body>
+</html>
